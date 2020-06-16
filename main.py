@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     e = Engine(c)
 
-    e.debug()
-    e.step_forward()
-    e.debug()
-    
+    for i in range(1, 6):
+        print(f"step {i}")
+        e.step_forward()
+        e.debug()

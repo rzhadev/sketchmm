@@ -12,7 +12,7 @@ class Config():
                                        "timeStep": dt},
                         "data": {
                             "atom1": {"pos": [0.0, 0.0], "vel": [0.0, 0.0], "acc": [0.0, 0.0]},  # noqa
-                            "atom2": {"pos": [10.0, 10.0], "vel": [0.0, 0.0], "acc": [0.0, 0.0]},  # noqa
+                            "atom2": {"pos": [0.0, 0.0], "vel": [0.0, 0.0], "acc": [0.0, 0.0]},  # noqa
                         }
         }
 
@@ -34,6 +34,8 @@ class Config():
                 print("Failed loading config file")
 
 
+"""
 if __name__ == "__main__":
     con = Config()
     con.to_yaml('setup.yaml')
+"""

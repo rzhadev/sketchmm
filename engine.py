@@ -25,7 +25,8 @@ class Engine(object):
         for k, v in self.config.mapping["data"].items():
             atom = Atom(np.array(v["pos"]),
                         np.array(v["vel"]),
-                        np.array(v["acc"]))
+                        np.array(v["acc"]),
+                        id=k)
 
             atoms.append(atom)
         return np.array(atoms)
