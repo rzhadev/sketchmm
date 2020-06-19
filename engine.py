@@ -1,6 +1,7 @@
 import numpy as np
 from config import Config
 from atom import Atom
+from data import Collector
 # manage and handle movement of molecules
 # T and P control
 # link with graping system and rendering
@@ -9,28 +10,32 @@ from atom import Atom
 class Engine(object):
 
     # elements -> np array of atom objects
+    # N -> number of molecules
     # con -> configuration object
     # iterations -> number of steps taken
     # time -> simulation time in natural units
     # running -> whether simulation is running or not
+    # stats -> store system quantities
     def __init__(self, con_filepath="setup.yaml"):
         self.config = Config()
         self.config.load_yaml(con_filepath)
         self.atom_list = self.__prep()
-        self.time = 0
+        self.time = 0.0
         self.iterations = 0
         self.N = len(self.atom_list)
         self.running = False
         self.stats = {"potential_energy": 0.0,
                       "kinetic_energy": 0.0,
                       "energy": 0.0,
-                      "pressure": 0,
-                      "temperature": 0,
+                      "pressure": 0.0,
+                      "temperature": 0.0,
                       "sampling_count": 0,
-                      "avg_T": 0,
-                      "avg_P": 0}
+                      "avg_T": 0.0,
+                      "avg_P": 0.0}
+        self.dist = []
+        self.times = []
 
-    # load in preset atom data
+    # load in preset atom data from yaml file
     def __prep(self):
 
         atoms = []
@@ -44,7 +49,7 @@ class Engine(object):
         return np.array(atoms)
 
     def compute_stats(self):
-        self.stats["kinetic_energy"] = 0
+        self.stats["kinetic_energy"] = 0.0
         mass = self.config.mapping["parameters"]["m"]
         for atom in self.atom_list:
             self.stats["kinetic_energy"] += 0.5 * \
@@ -110,7 +115,7 @@ class Engine(object):
     # use F=ma to find accelerations
 
     def update_accelerations(self):
-        self.stats["potential_energy"] = 0
+        self.stats["potential_energy"] = 0.0
         epsilon = self.config.mapping["parameters"]["epsilon"]
         sigma = self.config.mapping["parameters"]["sigma"]
         mass = self.config.mapping["parameters"]["m"]
@@ -139,7 +144,9 @@ class Engine(object):
                             # print(f"delta x: {delta_x}")
                             # print(f"delta y: {delta_y}")
                             print(f"dist: {np.power(r_sq, 0.5)}")
-
+                            self.dist.append(np.power(r_sq, 0.5))
+                            
+                            self.times.append(self.time)
                             inv_r_sq = 1.0 / (r_sq)
                             pinv_r_sq = sigma/(r_sq)
                             # attractive term
