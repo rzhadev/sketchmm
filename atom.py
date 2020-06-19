@@ -12,4 +12,4 @@ class Atom():
         self.color = c
 
     def __str__(self):
-        return f" id {self.name}, pos {self.pos}, vel {self.vel}, acc {self.acc}"  # noqa
+        return f" id:{self.name}, pos:{self.pos}, vel:{self.vel}"  # noqa
