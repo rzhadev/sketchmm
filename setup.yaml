@@ -1,27 +1,8 @@
-data:
-  atom1:
-    acc:
-    - 0.0
-    - 0.0
-    pos:
-    - 1.511083
-    - 2.552912
-    vel:
-    - 0.0
-    - 0.0
-  atom2:
-    acc:
-    - 0.0
-    - 0.0
-    pos:
-    - 3.408917
-    - 2.457088
-    vel:
-    - 0.0
-    - 0.0
 parameters:
   epsilon: 1
   kB: 1
   m: 1
   sigma: 1
-  timeStep: 0.02
+  timeStep: 0.002
+sampleInterval: 0.4
+boxSize: 50

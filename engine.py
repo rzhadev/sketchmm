@@ -1,95 +1,127 @@
+#!/usr/bin/env pypy
+
 import numpy as np
-from config import Config
-from atom import Atom
-from data import Collector
-# manage and handle movement of molecules
-# T and P control
-# link with graping system and rendering
+import time
+import yaml
+import os
+import os.path
+
+
+class Atom():
+    # np arrays with length 2 to store coords
+    def __init__(self, p, v, a, id, c=0):
+        self.name = id
+        self.pos = p
+        self.vel = v
+        self.acc = a
+        # adjust color based on velocity
+        self.color = c
+
+    def __str__(self):
+        return f" id:{self.name}, pos:{self.pos}, vel:{self.vel}"
 
 
 class Engine(object):
 
-    # elements -> np array of atom objects
-    # N -> number of molecules
-    # con -> configuration object
-    # iterations -> number of steps taken
-    # time -> simulation time in natural units
-    # running -> whether simulation is running or not
-    # stats -> store system quantities
-    def __init__(self, con_filepath="setup.yaml"):
-        self.config = Config()
-        self.config.load_yaml(con_filepath)
-        self.atom_list = self.__prep()
-        self.time = 0.0
-        self.iterations = 0
+    def __init__(self):
+        self.__load_yaml()
         self.N = len(self.atom_list)
         self.running = False
-        self.stats = {"potential_energy": 0.0,
-                      "kinetic_energy": 0.0,
-                      "energy": 0.0,
-                      "pressure": 0.0,
-                      "temperature": 0.0,
-                      "sampling_count": 0,
-                      "avg_T": 0.0,
-                      "avg_P": 0.0}
-        self.dist = []
-        self.times = []
+        self.stats = {"pE": 0.0,
+                      "kE": 0.0,
+                      "E": 0.0,
+                      "instantP": 0.0,
+                      "instantT": 0.0,
+                      "sampleCount": 0,
+                      "avgT": 0.0,
+                      "avgP": 0.0,
+                      "totalT": 0.0,
+                      "totalP": 0.0,
+                      "last_sample": 0.0,
+                      "time": 0.0,
+                      "iterations": 0}
 
-    # load in preset atom data from yaml file
-    def __prep(self):
+    def __load_yaml(self, setup="./setup.yaml", data="./data.yaml"):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        setup_path = os.path.join(dir_path, setup)
+        data_path = os.path.join(dir_path, data)
+        try:
+            with open(setup_path, 'r') as f:
+                self.config = yaml.load(f, Loader=yaml.SafeLoader)
+                print("Loaded configuration from %s" % setup_path)
+            with open(data_path, 'r') as f:
+                data = yaml.load(f, Loader=yaml.SafeLoader)
+                atoms = []
+                for k, v in data.items():
+                    atom = Atom(np.array(v["pos"]),
+                                np.array(v["vel"]),
+                                np.array(v["acc"]),
+                                id=k)
+                    atoms.append(atom)
+                print("Loaded configuration from %s" % data_path)
+                self.atom_list = atoms
 
-        atoms = []
-        for k, v in self.config.mapping["data"].items():
-            atom = Atom(np.array(v["pos"]),
-                        np.array(v["vel"]),
-                        np.array(v["acc"]),
-                        id=k)
-
-            atoms.append(atom)
-        return np.array(atoms)
+        except FileNotFoundError and ImportError:
+            print("File could not be found.")
 
     def compute_stats(self):
-        self.stats["kinetic_energy"] = 0.0
-        mass = self.config.mapping["parameters"]["m"]
+        sampleInt = self.config["sampleInterval"]
+        self.stats["kE"] = 0.0
+        mass = self.config["parameters"]["m"]
+        kB = self.config["parameters"]["kB"]
         for atom in self.atom_list:
-            self.stats["kinetic_energy"] += 0.5 * \
+            self.stats["kE"] += 0.5 * \
                 ((mass*atom.vel[0]*atom.vel[0]) +
                  (mass*atom.vel[1]*atom.vel[1]))
-        self.stats["energy"] = self.stats["kinetic_energy"] + \
-            self.stats["potential_energy"]
+        self.stats["E"] = self.stats["kE"] + \
+            self.stats["pE"]
+        self.stats["instantT"] = self.stats["kE"] / (self.N * kB)
+
+        if (self.stats["time"] - self.stats["last_sample"]) >= sampleInt:
+            self.stats["totalT"] += self.stats["instantT"]
+            self.stats["totalP"] += self.stats["instantP"]
+            self.stats["sampleCount"] += 1
+            self.stats["avgT"] = self.stats["totalT"] / \
+                self.stats["sampleCount"]
+            self.stats["avgP"] = self.stats["totalP"] / \
+                self.stats["sampleCount"]
+            self.stats["last_sample"] = self.stats["time"]
 
     def debug(self):
 
         for atom in self.atom_list:
             print(atom)
 
-        # print(f"KE {self.stats['kinetic_energy']}")
-        # print(f"PE {self.stats['potential_energy']}")
-        print(f"E {self.stats['energy']}\n")
+        print(f"E: {self.stats['E']}")
+        print(f"avgT: {self.stats['avgT']}")
+        print(f"avgP: {self.stats['avgP']}\n")
 
-    # run MD simulation
     def simulate(self):
         self.running = True
+        start_time = time.time()
         while self.running:
             self.step_forward()
-            self.compute_stats()
             self.debug()
+        end_time = time.time()
+        print(f"{end_time-start_time} seconds elapsed")
 
     # run a fixed number of steps
     def fixed_steps_simulation(self, steps):
+        start_time = time.time()
         for _ in range(steps):
             self.step_forward()
-            self.compute_stats()
             self.debug()
+        end_time = time.time()
+        print(f"{end_time-start_time} seconds elapsed")
 
     # move the simulation forward by one time step
     # using velocity verlet alg
 
     def step_forward(self):
-        self.iterations += 1
-        print(f"time: {self.time}")
-        print(f"iterations: {self.iterations}")
-        dt = self.config.mapping["parameters"]["timeStep"]
+        self.stats["iterations"] += 1
+        print(f"time: {self.stats['time']:.4f}")
+        print(f"iterations: {self.stats['iterations']}")
+        dt = self.config["parameters"]["timeStep"]
         dt_sq = dt * dt
         for i in range(self.N):
 
@@ -107,18 +139,47 @@ class Engine(object):
         for y in range(self.N):
             self.atom_list[y].vel[0] += (0.5 * self.atom_list[y].acc[0] * dt)
             self.atom_list[y].vel[1] += (0.5 * self.atom_list[y].acc[1] * dt)
+        self.stats["time"] += dt
+        self.apply_boundary()
+        self.compute_stats()
 
-        self.time += dt
+    # check for wall collisions
+    # apply "hard" wall with conservation of momentum
+    def apply_boundary(self, buffer=0.5):
+        boundary = self.config["boxSize"]
+        wallForce = 0.0
+        for i in range(self.N):
+            atom = self.atom_list[i]
+            # check if atom has hit a wall
+            leftx = atom.pos[0] < buffer
+            rightx = atom.pos[0] > (boundary - buffer)
+            lefty = atom.pos[1] < buffer
+            righty = atom.pos[1] > (boundary - buffer)
+            # apply conservation of momentum,
+            # forces applied on different walls will cancel out
+            if leftx or rightx:
+                self.atom_list[i].vel[0] = -(self.atom_list[i].vel[0])
+                if leftx:
+                    wallForce -= atom.acc[0]
+                elif rightx:
+                    wallForce += atom.acc[0]
+            if lefty or righty:
+                self.atom_list[i].vel[1] = -(self.atom_list[i].vel[1])
+                if lefty:
+                    wallForce -= atom.acc[1]
+                elif righty:
+                    wallForce += atom.acc[1]
+        # pressure = force per unit area
+        self.stats["instantP"] = wallForce / (4 * boundary)
 
     # use analytical derivation of L-J
     # potential to calculate interaction forces between molecules
     # use F=ma to find accelerations
-
     def update_accelerations(self):
-        self.stats["potential_energy"] = 0.0
-        epsilon = self.config.mapping["parameters"]["epsilon"]
-        sigma = self.config.mapping["parameters"]["sigma"]
-        mass = self.config.mapping["parameters"]["m"]
+        self.stats["pE"] = 0.0
+        epsilon = self.config["parameters"]["epsilon"]
+        sigma = self.config["parameters"]["sigma"]
+        mass = self.config["parameters"]["m"]
 
         # set F=0 at cutoff distance
         cutoff = 3.5
@@ -128,6 +189,8 @@ class Engine(object):
         cut_pE = 4 * epsilon * \
             (np.power((sigma/cutoff), 12) - np.power((sigma/cutoff), 6))
 
+        # N^2 double loop for force calculation
+        # could switch to N alg like cell lists
         for i in range(self.N):
             for j in range(i):
                 atom1 = self.atom_list[i]
@@ -141,12 +204,6 @@ class Engine(object):
                     if delta_y_sq < cutoff_sq:
                         r_sq = delta_x_sq + delta_y_sq
                         if r_sq < cutoff_sq:
-                            # print(f"delta x: {delta_x}")
-                            # print(f"delta y: {delta_y}")
-                            print(f"dist: {np.power(r_sq, 0.5)}")
-                            self.dist.append(np.power(r_sq, 0.5))
-                            
-                            self.times.append(self.time)
                             inv_r_sq = 1.0 / (r_sq)
                             pinv_r_sq = sigma/(r_sq)
                             # attractive term
@@ -154,7 +211,7 @@ class Engine(object):
                             # repulsive term
                             term1 = term2 * term2
 
-                            self.stats["potential_energy"] += 4.0 * \
+                            self.stats["pE"] += 4.0 * \
                                 epsilon * (term1 - term2) - cut_pE
 
                             forcex = delta_x * 24.0 * epsilon * ((2.0 * term1) - term2) * inv_r_sq  # noqa
