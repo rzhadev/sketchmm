@@ -16,20 +16,21 @@ class Engine(object):
         self.pos = None
         self.vel = None
         self.acc = None
+        self.sampleInterval = 0.0
+        self.rescaleInterval = 0.0
         self.id = []
-        self.sim_name = ""
         self.running = False
+        # implement trajectory file output
+        self.write_output = False
         self.pE = 0.0
         self.kE = 0.0
         self.E = 0.0
-        self.instantP = 0.0
         self.instantT = 0.0
         self.sampleCount = 0
         self.avgT = 0.0
-        self.avgP = 0.0
         self.totalT = 0.0
-        self.totalP = 0.0
         self.last_sample_time = 0.0
+        self.last_rescale_time = 0.0
         self.time = 0.0
         self.iterations = 0
         self.__rev(setup, data)
@@ -41,6 +42,11 @@ class Engine(object):
         try:
             with open(setup_path, 'r') as f:
                 self.config = yaml.load(f, Loader=yaml.SafeLoader)
+                self.sampleInterval = self.config["parameters"]["timeStep"] *\
+                    self.config["sampleInterval"]
+                self.rescaleInterval = self.config["parameters"]["timeStep"] *\
+                    self.config["rescaleInterval"]
+
                 print("Loaded configuration from %s" % setup_path)
                 f.close()
         except FileNotFoundError:
@@ -51,7 +57,7 @@ class Engine(object):
                 self.pos = np.zeros((self.N, self.DIM))
                 self.vel = np.zeros((self.N, self.DIM))
                 self.acc = np.zeros((self.N, self.DIM))
-                self.sim_name = f.readline()
+                comment = f.readline()
                 data = [i.split() for i in f.readlines()]
                 if len(data) != self.N:
                     raise SizeMissmatch
@@ -71,33 +77,37 @@ class Engine(object):
             print("File not found at %s" % data_path)
 
     def compute_stats(self):
-        sampleInt = self.config["sampleInterval"]
         self.kE = 0.0
         mass = self.config["parameters"]["m"]
         kB = self.config["parameters"]["kB"]
         for i in range(self.N):
-
             self.kE += 0.5 * \
                 ((mass*self.vel[i][0]*self.vel[i][0]) +
                  (mass*self.vel[i][1]*self.vel[i][1]))
 
         self.E = self.kE + self.pE
         self.instantT = self.kE / (self.N * kB)
-        if (self.time - self.last_sample_time) >= sampleInt:
+        if (self.time - self.last_sample_time) >= self.sampleInterval:
             self.totalT += self.instantT
-            self.totalP += self.instantP
             self.sampleCount += 1
-            self.avgT = self.totalT / \
-                self.sampleCount
-            self.avgP = self.totalP / \
-                self.sampleCount
+            self.avgT = self.totalT / self.sampleCount
             self.last_sample_time = self.time
 
-    def debug(self):
-        print(f"E: {self.E}")
-        print(f"avgT: {self.avgT}")
-        print(f"avgP: {self.avgP}\n")
+        if self.config["rescaleVel"]:
+            if (self.time - self.last_rescale) >= self.rescaleInterval:
+                for i in range(self.N):
+                    self.vel[i] *= np.power((self.config["targetTemp"], self.avgT))  # noqa
 
+    def debug(self):
+        """
+        for i in range(self.N):
+            print(f"{i}, pos x:{self.pos[0]}, pos y:{self.pos[1]}")
+        """
+        print(f"E: {self.E}")
+        print(f"avgT: {self.avgT}\n")
+
+    """
+    for debugging engine calculations
     def simulate(self):
         self.running = True
         start_time = time.time()
@@ -115,6 +125,7 @@ class Engine(object):
         end_time = time.time()
         print(f"{end_time-start_time} seconds elapsed")
 
+    """
     # move the simulation forward by one time step
     # using velocity verlet alg
 
@@ -130,47 +141,20 @@ class Engine(object):
                 dt + self.acc[i][0] * 0.5 * dt_sq
             self.pos[i][1] += self.vel[i][1] * \
                 dt + self.acc[i][1] * 0.5 * dt_sq
+            # periodic boundary condition
+            self.pos[i][0] = self.pos[i][0] % self.config["boxSize"]
+            self.pos[i][1] = self.pos[i][1] % self.config["boxSize"]
             self.vel[i][0] += (0.5 * self.acc[i][0] * dt)
             self.vel[i][1] += (0.5 * self.acc[i][1] * dt)
         self.update_accelerations()
         # update velocities by full time step
+        # could maybe add velocity rescaling for NVT
         for y in range(self.N):
             self.vel[y][0] += (0.5 * self.acc[y][0] * dt)
             self.vel[y][1] += (0.5 * self.acc[y][1] * dt)
         self.time += dt
-        # self.apply_boundary()
         self.compute_stats()
 
-    # change to periodic boundary
-    # check for wall collisions
-    # apply "hard" wall with conservation of momentum
-    """ def apply_boundary(self, buffer=0.5):
-        boundary = self.config["boxSize"]
-        wallForce = 0.0
-        for i in range(self.N):
-            atom = self.atom_list[i]
-            # check if atom has hit a wall
-            leftx = atom.pos[0] < buffer
-            rightx = atom.pos[0] > (boundary - buffer)
-            lefty = atom.pos[1] < buffer
-            righty = atom.pos[1] > (boundary - buffer)
-            # apply conservation of momentum,
-            # forces applied on different walls will cancel out
-            if leftx or rightx:
-                self.vel[i][0] = -(self.vel[i][0])
-                if leftx:
-                    wallForce -= atom.acc[0]
-                elif rightx:
-                    wallForce += atom.acc[0]
-            if lefty or righty:
-                self.vel[i][1] = -(self.vel[i][1])
-                if lefty:
-                    wallForce -= atom.acc[1]
-                elif righty:
-                    wallForce += atom.acc[1]
-        # pressure = force per unit area
-        self.stats["instantP"] = wallForce / (4 * boundary)
-    """
 # use analytical derivation of L-J
 # potential to calculate interaction forces between molecules
 # use F=ma to find accelerations
@@ -224,8 +208,3 @@ class SizeMissmatch(Exception):
 
 class DimensionMissmatch(Exception):
     pass
-
-
-if __name__ == "__main__":
-    e = Engine()
-    e.fixed_steps_simulation(1000)
