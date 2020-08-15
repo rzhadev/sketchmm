@@ -13,16 +13,18 @@ DEFAULT = {
     "parameters": {
         "epsilon": 1,
         "kB": 1,
-        "m":1, 
-        "sigma":1, 
+        "m": 1,
+        "sigma": 1,
         "timeStep": 2.0e-2
-    }, 
+    },
     "boxSize": 5,
     "sampleInterval": 5,
     "rescaleInterval": 50,
     "targetTemp": 0.5,
     "N": 16
 }
+
+
 class Engine(object):
 
     # load configuration settings, or default settings (parse from command line)
@@ -47,8 +49,8 @@ class Engine(object):
         self.iterations = 0
         self.init_simulation()
 
-
     # load from config from yaml file
+
     def load_settings(self, settings_file):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         settings_path = os.path.join(dir_path, settings_file)
@@ -58,7 +60,7 @@ class Engine(object):
             f.close()
         except FileNotFoundError:
             print("Settings file not found.")
-        
+
         self.init_simulation()
 
     # optionally load data from .xyz file
@@ -81,7 +83,7 @@ class Engine(object):
             f.close()
         except FileNotFoundError:
             print("Data file not found.")
-        
+
         kB = self.config["parameters"]["kB"]
         m = self.config["parameters"]["m"]
         T = self.config["targetTemp"]
@@ -131,7 +133,6 @@ class Engine(object):
                     self.pos[index] = np.asarray((x, y))
                     index += 1
 
-
     # # calculate energy, potential energy
     # kinetic energy, instant temperature, average temperature
     # of the system
@@ -144,14 +145,12 @@ class Engine(object):
         for i in range(self.DIM):
             self.kE += (mass * 0.5 * np.sum(self.vel[:, i] * self.vel[:, i]))
         self.E = self.kE + self.pE
-        
+
         self.instantT = self.kE / (self.N * kB)
         if self.iterations % self.config["sampleInterval"] == 0:
             self.totalT += self.instantT
             self.sample_count += 1
             self.avgT = self.totalT / self.sample_count
-
-
 
     def debug(self):
         print(f"time: {self.time:.4f}")
@@ -170,15 +169,16 @@ class Engine(object):
         box_length = self.config["boxSize"]
         self.iterations += 1
         self.time += dt
-        # update positions to 2nd degree accuracy 
+        # update positions to 2nd degree accuracy
         # and half time step for velocity
         for i in range(self.DIM):
-            self.pos[:, i] += self.vel[:, i] * dt + self.acc[:, i] * 0.5 * dt * dt
+            self.pos[:, i] += self.vel[:, i] * \
+                dt + self.acc[:, i] * 0.5 * dt * dt
             # periodic boundary conditions
             # wrap coordinates around boundaries
             self.pos[:, i] = self.pos[:, i] % box_length
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
-            
+
         self.apply_force_field()
         # update velocity by another half time step
         for i in range(self.DIM):
@@ -191,10 +191,10 @@ class Engine(object):
         self.debug()
         self.stats()
 
-
     # calculate pair-wise interactions between molecules
     # or within periodic images of the system (if greater than cutoff)
     # apply forces to all particles using newton's second law
+
     def apply_force_field(self):
         self.pE = 0.0
         self.acc = np.zeros((self.N, self.DIM))
@@ -207,7 +207,7 @@ class Engine(object):
         # shift potential energy at cut off distance
         cut_pE = 4 * eps * \
             (np.power((sig/cutoff), 12) - np.power((sig/cutoff), 6))
-        
+
         # try to optimize here using linked lists later
         for i in range(self.N - 1):
             for j in range(i+1, self.N):
@@ -229,7 +229,7 @@ class Engine(object):
                 delta_x_sq = delta_x ** 2
                 delta_y_sq = delta_y ** 2
                 dist_sq = delta_x_sq + delta_y_sq
-                if dist_sq < (cutoff * cutoff): 
+                if dist_sq < (cutoff * cutoff):
                     inv_dist_sq = 1.0 / dist_sq
                     para_inv = sig / dist_sq
                     attra_term = para_inv ** 3
@@ -252,9 +252,10 @@ class Engine(object):
         for _ in range(steps):
             self.step_forward()
         end_time = time.time()
-        persec = self.iterations / (end_time - start_time) 
+        persec = self.iterations / (end_time - start_time)
         print(f"{end_time-start_time} seconds elapsed")
         print(f"{persec} time steps per second")
+
 
 class NSizeMissmatch(Exception):
     pass
