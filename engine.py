@@ -123,7 +123,7 @@ class Engine(object):
         split = L / float(points)
 
         # if N is not a perfect square,
-        # a perfect lattice cant be generated.
+        # a perfect square lattice cant be generated.
         # Must increment points to include the extra particles and
         # recalculate distance between lattice points
         while(points ** 2 < self.N):
@@ -197,6 +197,12 @@ class Engine(object):
         self.debug()
         self.stats()
 
+    # implement cell linked list alg
+    # for when N is greater than give or take 100 atoms
+    # benchmark both the apply_force_field() and apply_linked_cells() 
+    # to determine when the engine switchs
+    def apply_linked_cells(self):
+        pass
     # calculate pair-wise interactions between molecules
     # or within periodic images of the system (if greater than cutoff)
     # apply forces to all particles using newton's second law
@@ -253,14 +259,14 @@ class Engine(object):
                     self.acc[j][0] -= forcex/mass
                     self.acc[j][1] -= forcey/mass
 
-    def fixed_steps_simulation(self, steps):
-        start_time = time.time()
-        for _ in range(steps):
-            self.step_forward()
-        end_time = time.time()
-        persec = self.iterations / (end_time - start_time)
-        print(f"{end_time-start_time} seconds elapsed")
-        print(f"{persec} time steps per second")
+    # def fixed_steps_simulation(self, steps):
+    #     start_time = time.time()
+    #     for _ in range(steps):
+    #         self.step_forward()
+    #     end_time = time.time()
+    #     persec = self.iterations / (end_time - start_time)
+    #     print(f"{end_time-start_time} seconds elapsed")
+    #     print(f"{persec} time steps per second")
 
 
 class NSizeMissmatch(Exception):
@@ -268,15 +274,8 @@ class NSizeMissmatch(Exception):
     the settings file."""
     pass
 
-
-class LatticeGenerationException(Exception):
-    """The number particles is not a perfect square. Try
-    using an N of a perfect square."""
-    pass
-
-
 if __name__ == "__main__":
     e = Engine()
     e.load_settings("./settings.yaml")
     # e.load_positions("./data.xyz")
-    e.fixed_steps_simulation(2000)
+    # e.fixed_steps_simulation(2000)

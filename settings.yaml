@@ -3,9 +3,9 @@ parameters:
   kB: 1
   m: 1
   sigma: 1
-  timeStep: 2.0e-2
-boxSize: 50
+  timeStep: 1.0e-4
+boxSize: 10
 sampleInterval: 5
-rescaleInterval: 40
+rescaleInterval: 10
 targetTemp: 0.5
 N: 100
