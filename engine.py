@@ -21,7 +21,7 @@ DEFAULT = {
     "sampleInterval": 5,
     "rescaleInterval": 40,
     "targetTemp": 0.5,
-    "N": 25
+    "N": 2
 }
 
 
@@ -107,6 +107,7 @@ class Engine(object):
         kB = self.config["parameters"]["kB"]
         m = self.config["parameters"]["m"]
         T = self.config["targetTemp"]
+        L = self.config["boxSize"]
         scale = np.sqrt((kB*T/m))
         mags = maxwell.rvs(size=self.N, scale=scale, loc=0.0)
         theta = np.random.random(self.N) * 2 * np.pi
@@ -115,21 +116,24 @@ class Engine(object):
 
         # lattice generation
         # -for a box of L x L dimensions,
-        # there are sqrt(N) boxes that cover an L length side
-        # with an L/sqrt(N) distance between boxes
+        # there are sqrt(N) points that cover an L length side
+        # with an L/sqrt(N) distance between lattice points
 
-        # insufficient volume handling
-        # need to adjust N or boxSize if multiple atoms are positioned at the
-        # same lattice point (i.e there isn't enough volume in the system)
-        # maybe use a set/np.where/lambda function to trim excess atoms
-        # then reinitialize the velocities
-        boxes = int(round(np.power(self.N, (1.0 / self.DIM))))
-        split = self.config["boxSize"] / float(boxes)
-        # print(f"points {boxes}")
+        points = int(round(np.power(self.N, (1.0 / self.DIM))))
+        split = L / float(points)
+
+        # if N is not a perfect square,
+        # a perfect lattice cant be generated.
+        # Must increment points to include the extra particles and
+        # recalculate distance between lattice points
+        while(points ** 2 < self.N):
+            points += 1
+            split = L / float(points)
+
         index = 0
-        for i in range(boxes):
+        for i in range(points):
             x = (0.5 + i) * split
-            for j in range(boxes):
+            for j in range(points):
                 if index < self.N:
                     y = (0.5 + j) * split
                     self.pos[index] = np.asarray((x, y))
@@ -250,25 +254,29 @@ class Engine(object):
                     self.acc[j][1] -= forcey/mass
 
     def fixed_steps_simulation(self, steps):
-        print(self.pos)
         start_time = time.time()
         for _ in range(steps):
             self.step_forward()
         end_time = time.time()
         persec = self.iterations / (end_time - start_time)
-        print(self.pos)
         print(f"{end_time-start_time} seconds elapsed")
         print(f"{persec} time steps per second")
-        
+
 
 class NSizeMissmatch(Exception):
+    """The number of particles in the data input does not match
+    the settings file."""
     pass
 
-class InsufficientVolume(Exception):
+
+class LatticeGenerationException(Exception):
+    """The number particles is not a perfect square. Try
+    using an N of a perfect square."""
     pass
+
 
 if __name__ == "__main__":
     e = Engine()
     e.load_settings("./settings.yaml")
-    e.load_positions("./data.xyz")
+    # e.load_positions("./data.xyz")
     e.fixed_steps_simulation(2000)
