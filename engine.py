@@ -15,13 +15,13 @@ DEFAULT = {
         "kB": 1,
         "m": 1,
         "sigma": 1,
-        "timeStep": 2.0e-2
+        "timeStep": 1.0e-6
     },
     "boxSize": 5,
     "sampleInterval": 5,
-    "rescaleInterval": 50,
+    "rescaleInterval": 40,
     "targetTemp": 0.5,
-    "N": 16
+    "N": 25
 }
 
 
@@ -47,7 +47,7 @@ class Engine(object):
         self.sample_count = 0.0
         self.time = 0.0
         self.iterations = 0
-        self.init_simulation()
+        self.__init_simulation()
 
     # load from config from yaml file
 
@@ -61,7 +61,7 @@ class Engine(object):
         except FileNotFoundError:
             print("Settings file not found.")
 
-        self.init_simulation()
+        self.__init_simulation()
 
     # optionally load data from .xyz file
     def load_positions(self, data_file='./data.xyz'):
@@ -69,10 +69,11 @@ class Engine(object):
         data_path = os.path.join(dir_path, data_file)
         try:
             f = open(data_path, 'r')
-            if self.N != int(f.readline()):
+            length = int(f.readline())
+            if self.N != length:
                 raise NSizeMissmatch
             else:
-                self.N = int(f.readline())
+                self.N = length
             print(f"{f.readline()}")
             data = np.asarray([line.split() for line in f.readlines()])
             self.pos = np.zeros((self.N, self.DIM))
@@ -95,7 +96,7 @@ class Engine(object):
 
     # randomly initialize particle velocities according to distribution
     # use lattice structure for positions
-    def init_simulation(self):
+    def __init_simulation(self):
         self.N = self.config["N"]
         self.pos = np.zeros((self.N, self.DIM))
         self.vel = np.zeros((self.N, self.DIM))
@@ -124,6 +125,7 @@ class Engine(object):
         # then reinitialize the velocities
         boxes = int(round(np.power(self.N, (1.0 / self.DIM))))
         split = self.config["boxSize"] / float(boxes)
+        # print(f"points {boxes}")
         index = 0
         for i in range(boxes):
             x = (0.5 + i) * split
@@ -248,19 +250,25 @@ class Engine(object):
                     self.acc[j][1] -= forcey/mass
 
     def fixed_steps_simulation(self, steps):
+        print(self.pos)
         start_time = time.time()
         for _ in range(steps):
             self.step_forward()
         end_time = time.time()
         persec = self.iterations / (end_time - start_time)
+        print(self.pos)
         print(f"{end_time-start_time} seconds elapsed")
         print(f"{persec} time steps per second")
-
+        
 
 class NSizeMissmatch(Exception):
     pass
 
+class InsufficientVolume(Exception):
+    pass
 
 if __name__ == "__main__":
     e = Engine()
-    e.fixed_steps_simulation(1000)
+    e.load_settings("./settings.yaml")
+    e.load_positions("./data.xyz")
+    e.fixed_steps_simulation(2000)

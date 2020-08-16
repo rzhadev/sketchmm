@@ -6,6 +6,6 @@ parameters:
   timeStep: 2.0e-2
 boxSize: 50
 sampleInterval: 5
-rescaleInterval: 50
+rescaleInterval: 40
 targetTemp: 0.5
-N: 25
+N: 100
