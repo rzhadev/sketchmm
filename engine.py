@@ -19,7 +19,7 @@ DEFAULT = {
     },
     "boxSize": 5,
     "sampleInterval": 5,
-    "rescaleInterval": 40,
+    "rescaleInterval": 10,
     "targetTemp": 0.5,
     "N": 2
 }
@@ -27,26 +27,33 @@ DEFAULT = {
 
 class Engine(object):
 
+    DIM = 2
+    pos = np.zeros((0, 0), float)
+    vel = np.zeros((0, 0), float)
+    acc = np.zeros((0, 0), float)
+    potential_E = 0.0
+    kinetic_E = 0.0
+    energy = 0.0
+    instantT = 0.0
+    avgT = 0.0
+    totalT = 0.0
+    totalP = 0.0
+    avgP = 0.0
+    instantP = 0.0
+    sample_count = 0.0
+    time = 0.0
+    iterations = 0
+    virial = 0.0
     # load configuration settings, or default settings (parse from command line)
     # initialize particles using lattice/predefined positions
     # sample velocities
     # according to maxwell boltzmann distribution at targetTemp
+
     def __init__(self):
         self.config = DEFAULT
         self.N = self.config["N"]
-        self.DIM = 2
-        self.pos = np.zeros((0, 0), float)
-        self.vel = np.zeros((0, 0), float)
-        self.acc = np.zeros((0, 0), float)
-        self.pE = 0.0
-        self.kE = 0.0
-        self.E = 0.0
-        self.instantT = 0.0
-        self.avgT = 0.0
-        self.totalT = 0.0
-        self.sample_count = 0.0
-        self.time = 0.0
-        self.iterations = 0
+        self.volume = self.config["boxSize"] ** 2
+        self.density = self.N / self.volume
         self.__init_simulation()
 
     # load from config from yaml file
@@ -90,7 +97,7 @@ class Engine(object):
         T = self.config["targetTemp"]
         scale = np.sqrt((kB*T/m))
         mags = maxwell.rvs(size=self.N, scale=scale, loc=0.0)
-        theta = np.random.random(self.N) * 2 * np.pi
+        theta = np.random.random(self.N) * 2.0 * np.pi
         self.vel[:, 0] = mags * np.cos(theta)
         self.vel[:, 1] = mags * np.sin(theta)
 
@@ -145,31 +152,38 @@ class Engine(object):
     # (only calculate T if within the sample interval)
 
     def stats(self):
-        self.kE = 0.0
+        self.kinetic_E = 0.0
         mass = self.config["parameters"]["m"]
         kB = self.config["parameters"]["kB"]
         for i in range(self.DIM):
-            self.kE += (mass * 0.5 * np.sum(self.vel[:, i] * self.vel[:, i]))
-        self.E = self.kE + self.pE
+            self.kinetic_E += (mass * 0.5 *
+                               np.sum(self.vel[:, i] * self.vel[:, i]))
+        self.energy = self.kinetic_E + self.potential_E
 
-        self.instantT = self.kE / (self.N * kB)
+        self.instantT = self.kinetic_E / (self.N * kB)
+        self.instantP = self.density * kB * self.avgT + self.virial
         if self.iterations % self.config["sampleInterval"] == 0:
-            self.totalT += self.instantT
             self.sample_count += 1
+            self.totalT += self.instantT
             self.avgT = self.totalT / self.sample_count
+            self.totalP += self.instantP
+            self.avgP = self.totalP / self.sample_count
 
     def debug(self):
         print(f"time: {self.time:.4f}")
         print(f"iterations: {self.iterations}")
-        print(f"E: {self.E}")
+        print(f"E: {self.energy}")
         print(f"avgT: {self.avgT}")
-        print(f"instantT: {self.instantT}\n")
+        print(f"instantT: {self.instantT}")
+        print(f"avgP: {self.avgP}")
+        print(f"instantP: {self.instantP}\n")
 
     # move simulation one time step further according to
     # velocity verlet
     # apply periodic boundary conditions
     # and rescale velocities if within the interval
     # rescale by factor of sqrt(targetT/avgT)
+
     def step_forward(self):
         dt = self.config["parameters"]["timeStep"]
         box_length = self.config["boxSize"]
@@ -199,7 +213,7 @@ class Engine(object):
 
     # implement cell linked list alg
     # for when N is greater than give or take 100 atoms
-    # benchmark both the apply_force_field() and apply_linked_cells() 
+    # benchmark both the apply_force_field() and apply_linked_cells()
     # to determine when the engine switchs
     def apply_linked_cells(self):
         pass
@@ -208,7 +222,8 @@ class Engine(object):
     # apply forces to all particles using newton's second law
 
     def apply_force_field(self):
-        self.pE = 0.0
+        self.potential_E = 0.0
+        self.virial = 0.0
         self.acc = np.zeros((self.N, self.DIM))
         eps = self.config["parameters"]["epsilon"]
         sig = self.config["parameters"]["sigma"]
@@ -246,7 +261,7 @@ class Engine(object):
                     para_inv = sig / dist_sq
                     attra_term = para_inv ** 3
                     repul_term = attra_term ** 2
-                    self.pE += 4.0 * eps * \
+                    self.potential_E += 4.0 * eps * \
                         (repul_term - attra_term) - cut_pE
 
                     # negative gradient of LJ potential
@@ -259,6 +274,10 @@ class Engine(object):
                     self.acc[j][0] -= forcex/mass
                     self.acc[j][1] -= forcey/mass
 
+                    self.virial += np.sqrt(dist_sq) * \
+                        np.sqrt(forcex * forcex + forcey * forcey)
+
+        self.virial = self.virial / (self.volume * self.DIM)
     # def fixed_steps_simulation(self, steps):
     #     start_time = time.time()
     #     for _ in range(steps):
@@ -273,6 +292,7 @@ class NSizeMissmatch(Exception):
     """The number of particles in the data input does not match
     the settings file."""
     pass
+
 
 if __name__ == "__main__":
     e = Engine()
