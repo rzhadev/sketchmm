@@ -199,7 +199,10 @@ class Engine(object):
             self.pos[:, i] = self.pos[:, i] % box_length
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
 
-        self.apply_force_field()
+        if self.N >= 100:
+            self.apply_cell_force_field()
+        else:
+            self.apply_force_field()
         # update velocity by another half time step
         for i in range(self.DIM):
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
@@ -211,17 +214,112 @@ class Engine(object):
         self.debug()
         self.stats()
 
-    # implement cell linked list alg
-    # for when N is greater than give or take 100 atoms
-    # benchmark both the apply_force_field() and apply_linked_cells()
-    # to determine when the engine switchs
-    def apply_linked_cells(self):
-        pass
-    # calculate pair-wise interactions between molecules
+    # apply cell linked list algorithm
+    # when there are a lot of atoms
+    def apply_cell_force_field(self):
+        self.potential_E = 0.0
+        self.virial = 0.0
+        self.acc = np.zeros((self.N, self.DIM))
+        box_length = self.config["boxSize"]
+        eps = self.config["parameters"]["epsilon"]
+        sig = self.config["parameters"]["sigma"]
+        mass = self.config["parameters"]["m"]
+        RCUT = 2.5
+        cutoff = RCUT * sig
+        cut_pE = 4 * eps * \
+            (np.power((sig/cutoff), 12) - np.power((sig/cutoff), 6))
+        # number of cells for a row
+        l_cells = int(box_length // RCUT)
+        # length of each cell
+        cell_length = box_length / l_cells
+        # point to the first atom in each cell
+        cell_heads = np.full(l_cells * l_cells, fill_value=-1, dtype=np.int32)
+        # points to the linked atom of the i-th atom in the same cell
+        linked_list = np.zeros(self.N, dtype=np.int32)
+
+        # linked list construction
+        for i in range(self.N):
+            # vector cell index
+            xcell = int(self.pos[i][0] // cell_length)
+            ycell = int(self.pos[i][1] // cell_length)
+            # scalar cell index
+            c = xcell + l_cells * ycell
+            # i-th atom now points to previous head of the cell
+            linked_list[i] = cell_heads[c]
+            # cell head now points to this atom
+            cell_heads[c] = int(i)
+
+        for x in range(l_cells):
+            for y in range(l_cells):
+                cell_index = x + l_cells * y
+                # scan this cell and adjacent neighbor cells
+                for nx in range(x-1, x+2):
+                    for ny in range(y-1, y+2):
+                        shiftx = 0.0
+                        shifty = 0.0
+                        # apply periodic boundary conditions
+                        # if needed
+                        if nx < 0:
+                            shiftx = -box_length
+                        elif nx >= l_cells:
+                            shiftx = box_length
+                        if ny < 0:
+                            shifty = -box_length
+                        elif ny >= l_cells:
+                            shifty = box_length
+
+                        # pull index back within range of [0, l_cells-1]
+                        # if neighbor is out of bounds
+                        neighbor_index = (nx + 2 * l_cells) % l_cells + \
+                            (ny + 2 * l_cells) % l_cells * l_cells
+                        i = cell_heads[cell_index]
+                        while(i > -1):
+                            j = cell_heads[neighbor_index]
+                            while(j > -1):
+                                if (i < j):
+                                    delta_x = self.pos[i][0] - \
+                                        (self.pos[j][0] + shiftx)
+                                    delta_y = self.pos[i][1] - \
+                                        (self.pos[j][1] + shifty)
+                                    delta_x_sq = delta_x ** 2
+                                    delta_y_sq = delta_y ** 2
+                                    dist_sq = delta_x_sq + delta_y_sq
+                                    if dist_sq < (cutoff * cutoff):
+                                        inv_dist_sq = 1.0 / dist_sq
+                                        para_inv = sig / dist_sq
+                                        attra_term = para_inv ** 3
+                                        repul_term = attra_term ** 2
+                                        self.potential_E += 4.0 * eps * \
+                                            (repul_term - attra_term) - cut_pE
+
+                                        # negative gradient of LJ potential
+                                        forcex = delta_x * 24.0 * eps * \
+                                            ((2.0 * repul_term) -
+                                             attra_term) * inv_dist_sq
+                                        forcey = delta_y * 24.0 * eps * \
+                                            ((2.0 * repul_term) -
+                                             attra_term) * inv_dist_sq
+
+                                        self.acc[i][0] += forcex/mass
+                                        self.acc[i][1] += forcey/mass
+                                        self.acc[j][0] -= forcex/mass
+                                        self.acc[j][1] -= forcey/mass
+
+                                        self.virial += np.sqrt(dist_sq) * \
+                                            np.sqrt(forcex * forcex +
+                                                    forcey * forcey)
+
+                                j = linked_list[j]
+                            i = linked_list[i]
+
+        self.virial = self.virial / (self.volume * self.DIM)
+
+    # calculate naive pair-wise interactions between molecules
     # or within periodic images of the system (if greater than cutoff)
     # apply forces to all particles using newton's second law
 
     def apply_force_field(self):
+        RCUT = 2.5
         self.potential_E = 0.0
         self.virial = 0.0
         self.acc = np.zeros((self.N, self.DIM))
@@ -229,9 +327,9 @@ class Engine(object):
         sig = self.config["parameters"]["sigma"]
         mass = self.config["parameters"]["m"]
         # truncate at distance for LJ cutoff
-        cutoff = 2.5 * sig
+        cutoff = RCUT * sig
         box_length = self.config["boxSize"]
-        # shift potential energy at cut off distance
+        # shift potential energy
         cut_pE = 4 * eps * \
             (np.power((sig/cutoff), 12) - np.power((sig/cutoff), 6))
 
@@ -278,6 +376,7 @@ class Engine(object):
                         np.sqrt(forcex * forcex + forcey * forcey)
 
         self.virial = self.virial / (self.volume * self.DIM)
+
     # def fixed_steps_simulation(self, steps):
     #     start_time = time.time()
     #     for _ in range(steps):
@@ -296,6 +395,7 @@ class NSizeMissmatch(Exception):
 
 if __name__ == "__main__":
     e = Engine()
-    e.load_settings("./settings.yaml")
-    # e.load_positions("./data.xyz")
-    # e.fixed_steps_simulation(2000)
+    # e.load_settings("./settings.yaml")
+    e.load_positions("./data.xyz")
+    e.step_forward()
+    print(e.acc)
