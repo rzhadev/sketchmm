@@ -1,8 +1,23 @@
 # SketchMM
-SketchMM is a 2D classical molecular dynamics simulation written in python3.
+a 2D classical molecular dynamics simulation written in python3.\
 ![](test.gif)
 ---
-# Theory
+# Background
+https://en.wikipedia.org/wiki/Molecular_dynamics\
+Molecular dynamics are the use of computer simulations to numerically estimate the trajectory of a system. 
+
+# Methodology
+Molecular dynamics simulations typically have 5 main steps.
+
+1. Initialization of particle positions and particle velocities.
+
+2. Calculate forces and update positions and velocities according to an integration technique. 
+
+3. Apply boundary conditions and control temperature or pressure if needed.
+
+4. Calculate relevant statistics of the system.
+
+5. Repeat step 2-4 until a fixed number of time steps have elapsed. 
 
 # TODO
 # Reference
