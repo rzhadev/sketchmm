@@ -122,7 +122,6 @@ class Engine(object):
         # with an L/sqrt(N) distance between lattice points
 
         points = int(round(np.power(self.N, (1.0 / self.DIM))))
-        split = L / float(points)
 
         # if N is not a perfect square,
         # a perfect square lattice cant be generated.
@@ -130,7 +129,8 @@ class Engine(object):
         # recalculate distance between lattice points
         while(points ** 2 < self.N):
             points += 1
-            split = L / float(points)
+
+        split = L / float(points)
 
         index = 0
         for i in range(points):
@@ -406,9 +406,5 @@ class NSizeMissmatch(Exception):
 if __name__ == "__main__":
     e = Engine()
     e.load_settings("./settings.yaml")
-    plt.scatter(e.pos[:, 0], e.pos[:, 1])
-    plt.show()
-    """
     for i in range(1000):
         e.step_forward()
-    """
