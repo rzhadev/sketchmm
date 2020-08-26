@@ -15,7 +15,7 @@ DEFAULT = {
         "kB": 1,
         "m": 1,
         "sigma": 1,
-        "timeStep": 1.0e-6
+        "timeStep": 2.0e-2
     },
     "boxSize": 5,
     "sampleInterval": 5,
@@ -44,19 +44,10 @@ class Engine(object):
     time = 0.0
     iterations = 0
     virial = 0.0
-    # load configuration settings, or default settings (parse from command line)
-    # initialize particles using lattice/predefined positions
-    # sample velocities
-    # according to maxwell boltzmann distribution at targetTemp
 
     def __init__(self):
         self.config = DEFAULT
-        self.N = self.config["N"]
-        self.volume = self.config["boxSize"] ** 2
-        self.density = self.N / self.volume
         self.__init_simulation()
-
-    # load from config from yaml file
 
     def load_settings(self, settings_file):
         dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -71,9 +62,11 @@ class Engine(object):
         self.__init_simulation()
 
     # optionally load data from .xyz file
-    def load_positions(self, data_file='./data.xyz'):
+    def load_positions(self, settings_file, data_file):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         data_path = os.path.join(dir_path, data_file)
+        self.load_settings(settings_file)
+        # overwrite lattice positions with loaded data
         try:
             f = open(data_path, 'r')
             length = int(f.readline())
@@ -92,34 +85,36 @@ class Engine(object):
         except FileNotFoundError:
             print("Data file not found.")
 
+    # randomly initialize particle velocities according to
+    # maxwell-boltzmann distribution
+    def __init_velocities(self):
         kB = self.config["parameters"]["kB"]
         m = self.config["parameters"]["m"]
         T = self.config["targetTemp"]
         scale = np.sqrt((kB*T/m))
-        mags = maxwell.rvs(size=self.N, scale=scale, loc=0.0)
-        theta = np.random.random(self.N) * 2.0 * np.pi
-        self.vel[:, 0] = mags * np.cos(theta)
-        self.vel[:, 1] = mags * np.sin(theta)
+        self.vel[:, 0] = np.random.normal(0.0, scale=scale, size=self.N)
+        self.vel[:, 1] = np.random.normal(0.0, scale=scale, size=self.N)
+        self.vel[:, 0] -= sum(self.vel[:, 0]) / float(self.N)
+        self.vel[:, 1] -= sum(self.vel[:, 1]) / float(self.N)
+        factor = np.sqrt(2.0 * T * self.N /
+                         sum(self.vel[:, 0] ** 2 + self.vel[:, 1] ** 2))
+        self.vel[:, 0] *= factor
+        self.vel[:, 1] *= factor
 
-    # randomly initialize particle velocities according to distribution
+    # calculate some properties and
     # use lattice structure for positions
+
     def __init_simulation(self):
         self.N = self.config["N"]
+        self.volume = self.config["boxSize"] ** 2
+        self.density = self.N / self.volume
         self.pos = np.zeros((self.N, self.DIM))
         self.vel = np.zeros((self.N, self.DIM))
         self.acc = np.zeros((self.N, self.DIM))
 
         # sample maxwell boltzmann splitribution for target temp
         # scale param a = sqrt((kB * T)/m) for maxwell boltzmann
-        kB = self.config["parameters"]["kB"]
-        m = self.config["parameters"]["m"]
-        T = self.config["targetTemp"]
         L = self.config["boxSize"]
-        scale = np.sqrt((kB*T/m))
-        mags = maxwell.rvs(size=self.N, scale=scale, loc=0.0)
-        theta = np.random.random(self.N) * 2 * np.pi
-        self.vel[:, 0] = mags * np.cos(theta)
-        self.vel[:, 1] = mags * np.sin(theta)
 
         # lattice generation
         # -for a box of L x L dimensions,
@@ -145,6 +140,8 @@ class Engine(object):
                     y = (0.5 + j) * split
                     self.pos[index] = np.asarray((x, y))
                     index += 1
+
+        self.__init_velocities()
 
     # # calculate energy, potential energy
     # kinetic energy, instant temperature, average temperature
@@ -178,11 +175,8 @@ class Engine(object):
         print(f"avgP: {self.avgP}")
         print(f"instantP: {self.instantP}\n")
 
-    # move simulation one time step further according to
-    # velocity verlet
-    # apply periodic boundary conditions
-    # and rescale velocities if within the interval
-    # rescale by factor of sqrt(targetT/avgT)
+    # move simulation one time step further according to velocity verlet
+    # apply periodic boundary conditions and temp control
 
     def step_forward(self):
         dt = self.config["parameters"]["timeStep"]
@@ -200,14 +194,18 @@ class Engine(object):
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
 
         if self.N >= 100:
-            self.apply_cell_force_field()
+            self.apply_force_field1()
         else:
-            self.apply_force_field()
+            self.apply_force_field2()
         # update velocity by another half time step
         for i in range(self.DIM):
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
 
+        # rescale velocities if within the interval
         if self.iterations % self.config["rescaleInterval"] == 0:
+            # make sure center of mass doesnt drift
+            self.vel[:, 0] -= sum(self.vel[:, 0]) / float(self.N)
+            self.vel[:, 1] -= sum(self.vel[:, 1]) / float(self.N)
             self.vel[:, 0] *= np.sqrt(self.config["targetTemp"]/self.avgT)
             self.vel[:, 1] *= np.sqrt(self.config["targetTemp"]/self.avgT)
 
@@ -216,7 +214,8 @@ class Engine(object):
 
     # apply cell linked list algorithm
     # when there are a lot of atoms
-    def apply_cell_force_field(self):
+
+    def apply_force_field1(self):
         self.potential_E = 0.0
         self.virial = 0.0
         self.acc = np.zeros((self.N, self.DIM))
@@ -247,7 +246,7 @@ class Engine(object):
             # i-th atom now points to previous head of the cell
             linked_list[i] = cell_heads[c]
             # cell head now points to this atom
-            cell_heads[c] = int(i)
+            cell_heads[c] = i
 
         for x in range(l_cells):
             for y in range(l_cells):
@@ -318,7 +317,7 @@ class Engine(object):
     # or within periodic images of the system (if greater than cutoff)
     # apply forces to all particles using newton's second law
 
-    def apply_force_field(self):
+    def apply_force_field2(self):
         RCUT = 2.5
         self.potential_E = 0.0
         self.virial = 0.0
@@ -377,14 +376,25 @@ class Engine(object):
 
         self.virial = self.virial / (self.volume * self.DIM)
 
-    # def fixed_steps_simulation(self, steps):
-    #     start_time = time.time()
-    #     for _ in range(steps):
-    #         self.step_forward()
-    #     end_time = time.time()
-    #     persec = self.iterations / (end_time - start_time)
-    #     print(f"{end_time-start_time} seconds elapsed")
-    #     print(f"{persec} time steps per second")
+    # reset the engine
+    def reset(self):
+        self.pos = np.zeros((self.N, self.DIM), float)
+        self.vel = np.zeros((self.N, self.DIM), float)
+        self.acc = np.zeros((self.N, self.DIM), float)
+        self.potential_E = 0.0
+        self.kinetic_E = 0.0
+        self.energy = 0.0
+        self.instantT = 0.0
+        self.avgT = 0.0
+        self.totalT = 0.0
+        self.totalP = 0.0
+        self.avgP = 0.0
+        self.instantP = 0.0
+        self.sample_count = 0.0
+        self.time = 0.0
+        self.iterations = 0
+        self.virial = 0.0
+        self.__init_simulation()
 
 
 class NSizeMissmatch(Exception):
@@ -395,7 +405,10 @@ class NSizeMissmatch(Exception):
 
 if __name__ == "__main__":
     e = Engine()
-    # e.load_settings("./settings.yaml")
-    e.load_positions("./data.xyz")
-    e.step_forward()
-    print(e.acc)
+    e.load_settings("./settings.yaml")
+    plt.scatter(e.pos[:, 0], e.pos[:, 1])
+    plt.show()
+    """
+    for i in range(1000):
+        e.step_forward()
+    """
