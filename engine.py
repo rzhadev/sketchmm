@@ -28,6 +28,7 @@ DEFAULT = {
 class Engine(object):
 
     DIM = 2
+    debugging = False
     pos = np.zeros((0, 0), float)
     vel = np.zeros((0, 0), float)
     acc = np.zeros((0, 0), float)
@@ -167,13 +168,14 @@ class Engine(object):
             self.avgP = self.totalP / self.sample_count
 
     def debug(self):
-        print(f"time: {self.time:.4f}")
-        print(f"iterations: {self.iterations}")
-        print(f"E: {self.energy}")
-        print(f"avgT: {self.avgT}")
-        print(f"instantT: {self.instantT}")
-        print(f"avgP: {self.avgP}")
-        print(f"instantP: {self.instantP}\n")
+        if self.debugging:
+            print(f"time: {self.time:.4f}")
+            print(f"iterations: {self.iterations}")
+            print(f"E: {self.energy}")
+            print(f"avgT: {self.avgT}")
+            print(f"instantT: {self.instantT}")
+            print(f"avgP: {self.avgP}")
+            print(f"instantP: {self.instantP}\n")
 
     # move simulation one time step further according to velocity verlet
     # apply periodic boundary conditions and temp control
