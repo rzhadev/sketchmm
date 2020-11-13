@@ -4,8 +4,8 @@ parameters:
   m: 1
   sigma: 1
   timeStep: 1.0e-2
-boxSize: 50
+boxSize: 40
 sampleInterval: 5
 rescaleInterval: 10
 targetTemp: 0.5
-N: 1000
+N: 150

@@ -133,6 +133,7 @@ class Engine(object):
 
         split = L / float(points)
 
+        # arrange particles
         index = 0
         for i in range(points):
             x = (0.5 + i) * split
@@ -159,6 +160,7 @@ class Engine(object):
         self.energy = self.kinetic_E + self.potential_E
 
         self.instantT = self.kinetic_E / (self.N * kB)
+        # this probably doesnt work...
         self.instantP = self.density * kB * self.avgT + self.virial
         if self.iterations % self.config["sampleInterval"] == 0:
             self.sample_count += 1
@@ -196,9 +198,9 @@ class Engine(object):
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
 
         if self.N >= 100:
-            self.apply_force_field1()
+            self.linked_list()
         else:
-            self.apply_force_field2()
+            self.force_field()
         # update velocity by another half time step
         for i in range(self.DIM):
             self.vel[:, i] += 0.5 * self.acc[:, i] * dt
@@ -215,9 +217,8 @@ class Engine(object):
         self.stats()
 
     # apply cell linked list algorithm
-    # when there are a lot of atoms
 
-    def apply_force_field1(self):
+    def linked_list(self):
         self.potential_E = 0.0
         self.virial = 0.0
         self.acc = np.zeros((self.N, self.DIM))
@@ -319,7 +320,7 @@ class Engine(object):
     # or within periodic images of the system (if greater than cutoff)
     # apply forces to all particles using newton's second law
 
-    def apply_force_field2(self):
+    def force_field(self):
         RCUT = 2.5
         self.potential_E = 0.0
         self.virial = 0.0
@@ -334,7 +335,6 @@ class Engine(object):
         cut_pE = 4 * eps * \
             (np.power((sig/cutoff), 12) - np.power((sig/cutoff), 6))
 
-        # try to optimize here using linked lists later
         for i in range(self.N - 1):
             for j in range(i+1, self.N):
                 # apply minimum image convention

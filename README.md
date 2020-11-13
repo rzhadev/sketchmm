@@ -20,6 +20,13 @@ Molecular dynamics simulations typically have 5 main steps.
 5. Repeat step 2-4 until a fixed number of time steps have elapsed. 
 
 # TODO
+-Add GUI widgets for Matplotlib and graphing
+-add text boxes for FPS and system values (temp, P, etc)
+-switch to fixed canvas size AND fixed box size, will have to adjust pixels per unit
+-add in color mapping for velocity? more red = faster particle, switch with arrows? 
+-improve performance, maybe move engine to a python binding, currently at 150 particles only roughly 10 fps
+-make engine benchmarking more robust, it looks ugly rn
+
 # Reference
 https://arxiv.org/pdf/2001.07089.pdf\
 http://physics.weber.edu/schroeder/md/InteractiveMD.pdf\
