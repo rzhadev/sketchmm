@@ -1,0 +1,15 @@
+{
+    "label": {
+        "colours": {
+            "normal_text": "#00FF00",
+            "dark_bg": "#696969"
+        }
+    }, 
+    "button": {
+        "colours": {
+            "normal_bg": "#696969",
+            "hovered_bg": "#808080"
+        }
+    }
+    
+}

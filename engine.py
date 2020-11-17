@@ -17,7 +17,7 @@ DEFAULT = {
         "sigma": 1,
         "timeStep": 2.0e-2
     },
-    "boxSize": 5,
+    "boxSize": 10,
     "sampleInterval": 5,
     "rescaleInterval": 10,
     "targetTemp": 0.5,
